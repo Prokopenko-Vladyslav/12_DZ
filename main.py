@@ -1,6 +1,5 @@
 from collections import UserDict
 from datetime import datetime, date
-import pickle
 
 
 class Field:
@@ -9,7 +8,7 @@ class Field:
         self.value = value
 
     def validate(self, value):
-        return True
+        pass
 
     @property
     def value(self):
@@ -24,18 +23,20 @@ class Field:
 
 
 class Name(Field):
-    def __init__(self, value):
-        super().__init__(value)
+    pass
 
 
 class Phone(Field):
     def __init__(self, value):
-        super().__init__(value)
+        super().__init__(Field)
+        self.number = value
+
+    def __str__(self):
+        return self.number
 
     def validate(self, value):
-        if value is None or len(value) != 10 or not value.isdigit():
+        if len(value) != 10 or not value.isdigit():
             raise ValueError("Phone number must contain 10 digits.")
-        return True
 
 
 class Birthday(Field):
@@ -60,6 +61,8 @@ class Record:
         self.name = Name(name)
         self.phones = []
         self.birthday = Birthday(birthday)
+        if birthday:
+            self.birthday = birthday.value
 
     def add_phone(self, phone):
         try:
@@ -105,9 +108,28 @@ class Record:
         return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
 
 
+class RecordIterator:
+    def __init__(self, records):
+        self.records = records
+        self.index = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.index >= len(self.records):
+            raise StopIteration
+        record = self.records[self.index]
+        self.index += 1
+        return record
+
+
 class AddressBook(UserDict):
-    def add_record(self, record):
+    def add_record(self, record: Record):
         self.data[record.name.value] = record
+
+    def __iter__(self):
+        return RecordIterator(list(self.data.values()))
 
     def find(self, name):
         return self.data.get(name)
@@ -122,23 +144,3 @@ class AddressBook(UserDict):
         records = list(self.data.values())
         for i in range(0, len(records), batch_size):
             yield records[i:i + batch_size]
-
-    def save_to_file(self, filename):
-        with open(filename, 'wb') as file:
-            pickle.dump(self.data, file)
-
-    def load_from_file(self, filename):
-        with open(filename, 'rb') as file:
-            self.data = pickle.load(file)
-
-    def search(self, query):
-        results = []
-        for record in self.data.values():
-            if query in record.name.value or any(query in phone.value for phone in record.phones):
-                results.append(record)
-        return results
-
-
-if __name__ == "__main__":
-    book = AddressBook()
-
