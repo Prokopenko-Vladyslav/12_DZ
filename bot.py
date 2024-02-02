@@ -1,6 +1,6 @@
 import sys
 from typing import List
-from main import Record, AddressBook, Name, Phone, Birthday
+from model import Record, AddressBook, Name, Phone, Birthday
 from datetime import datetime
 import pickle
 
@@ -8,42 +8,43 @@ import pickle
 address_book = AddressBook()
 
 
-# для збереження у файлу
+# Для збереження у файлу
 def save_to_file(filename):
     try:
         with open(filename, 'wb') as file:
             pickle.dump(address_book.data, file)
     except IOError:
-        print("Помилка: не вдалося зберегти адресну книгу.")
+        print("Error: Failed to save address book.")  # Помилка: не вдалося зберегти адресну книгу.
+ 
 
-
-# для завантаження з файлу
+# Для завантаження з файлу
 def load_from_file(filename):
     try:
         with open(filename, 'rb') as file:
             address_book.data = pickle.load(file)
-        print("Адресна книга успішно завантажена.")
+        print("Address book loaded successfully.")  # Адресна книга успішно завантажена.
     except (IOError, pickle.UnpicklingError):
-        print("Помилка: не вдалося завантажити адресну книгу.")
+        print("Error: Failed to load address book.")   # Помилка: не вдалося завантажити адресну книгу.
 
 
+# Декоратор для обработки помилок
 def input_error(func):
     def wrapper(*args):
         try:
             return func(*args)
         except KeyError:
-            return "Enter user name"
+            return "Contact not found"
         except ValueError:
-            return "Give me name and phone please"
-        except IndexError:
             return "Invalid input"
+        except IndexError:
+            return "Missing input"
     return wrapper
 
 
 # Функция для додавання нового контакту
 @input_error
 def add_contact(name: str, phones: List[str]) -> str:
-    # Створюємо екземпляр запису
+    # Зтворюємо екземпляр запису
     name_field = Name(name)
     record = Record(name_field)
 
@@ -57,6 +58,7 @@ def add_contact(name: str, phones: List[str]) -> str:
     return "Contact added"
 
 
+# Змінити номер телефону у вже існуючого контакту
 @input_error
 def change_contact(name: str, old_phone: str, new_phone: str) -> str:
     record = address_book.data.get(name)
@@ -71,6 +73,7 @@ def change_contact(name: str, old_phone: str, new_phone: str) -> str:
     return "Old phone number not found for the contact"
 
 
+# Функция для пошуку номера телефону по імені контакту
 @input_error
 def phone_number(name: str) -> str:
     record = address_book.data.get(name)
@@ -81,7 +84,7 @@ def phone_number(name: str) -> str:
     return "Phone number not found"
 
 
-# Функция для установки дня рождения у контакта
+# Функция для встановлення дня народження
 @input_error
 def set_birthday(name: str, birthday: Birthday) -> str:
     record = address_book.data.get(name)
@@ -102,8 +105,8 @@ def show_all() -> str:
         return "No contacts found"
     output = ""
     for name, record in address_book.data.items():
-        phones = [phone.value for phone in record.phones]  # Получаем все значения номеров телефонов
-        phones_str = ", ".join(phones)  # Преобразуем список в строку с разделителем ", "
+        phones = [phone.value for phone in record.phones] 
+        phones_str = ", ".join(phones)  # Перетворимо список у рядок з роздільником ","
         birthday_info = ""
         if record.birthday:
             days_to_birthday = record.days_to_birthday()
@@ -117,6 +120,43 @@ def show_all() -> str:
     return output
 
 
+# Функція для пагінації контактів
+def paginate_contacts(page_size: int) -> str:
+    output = ""
+    for page in address_book.paginate(page_size):
+        for name, record in page:
+            phones = [phone.value for phone in record.phones]
+            phones_str = ", ".join(phones)
+            if record.birthday:
+                birthday = record.birthday.strftime("%d-%m-%Y")
+                output += f"{name}: {phones_str}(Birthday: {birthday})\n"
+            else:
+                output += f"{name}: {phones_str}\n"
+        output += "---\n"
+    return output
+
+
+# Функція для пошуку за збігом
+def search_contacts(query):
+    matching_contacts = []
+    for record in address_book.data.values():
+        name = record.name.value
+        phone_numbers = [phone.value for phone in record.phones]
+        if query in name or any(query in number for number in phone_numbers):
+            matching_contacts.append(record)
+
+    if len(matching_contacts) == 0:
+        return "No matching contacts found."
+
+    output = ""
+    for record in matching_contacts:
+        name = record.name.value
+        phones = ", ".join(phone.value for phone in record.phones)
+        output += f"Name: {name}\nPhone Numbers: {phones}\n\n"
+
+    return output
+
+
 def exit_bot() -> None:
     print("Good bye!")
     sys.exit()
@@ -126,7 +166,7 @@ def execute_command(command: str) -> str:
     action = command.split()
     if action[0].lower() == 'hello':
         return "How can I help you?"
-    elif action[0].lower() == 'add':         # add_contact, change_contact phone_number, show_all, 
+    elif action[0].lower() == 'add':
         if len(action) < 3:
             return "Missing input"
         name = action[1]
@@ -157,10 +197,22 @@ def execute_command(command: str) -> str:
             return set_birthday(name, birthday_field)
         except ValueError:
             return "Invalid date format. Please use the format: DD-MM-YYYY"    
-    elif len(action) == 2 and action[0].lower() == 'good' and action[1].lower() == 'bye':
+    elif len(action) >= 2 and action[0].lower() == 'good' and action[1].lower() == 'bye':
         return exit_bot()
     elif len(action) == 1 and action[0].lower() in ['close', 'exit']:
         return exit_bot()
+    elif action[0].lower() == "paginate":
+        if len(action) < 2:
+            return "Missing input"
+        page_size = int(action[1])
+        return paginate_contacts(page_size)
+
+    elif action[0].lower() == "search":
+        if len(action) < 2:
+            return "Missing input"
+        search_query = " ".join(action[1:])
+        search_result = search_contacts(search_query)
+        return search_result
     else:
         return "Command not recognized."
 
